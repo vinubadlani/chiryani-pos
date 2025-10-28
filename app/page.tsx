@@ -17,9 +17,11 @@ export default function Home() {
   const [cartItems, setCartItems] = useState<any[]>([])
   const [showReceipt, setShowReceipt] = useState(false)
   const [orderNumber, setOrderNumber] = useState("")
+  const [lastOrderData, setLastOrderData] = useState<CreateOrderData | null>(null)
   const [selectedItem, setSelectedItem] = useState<any>(null)
   const [showSizeSelector, setShowSizeSelector] = useState(false)
   const [isCartMinimized, setIsCartMinimized] = useState(true)
+  const [isThermalControlMinimized, setIsThermalControlMinimized] = useState(true)
 
   const addToCart = (item: any) => {
     if (item.requiresSize) {
@@ -58,6 +60,7 @@ export default function Home() {
       
       if (order) {
         setOrderNumber(order.order_number)
+        setLastOrderData(orderData)
         setShowReceipt(true)
         toast.success(`Order ${order.order_number} created successfully!`)
       } else {
@@ -73,6 +76,7 @@ export default function Home() {
     setCartItems([])
     setShowReceipt(false)
     setOrderNumber("")
+    setLastOrderData(null)
     setIsCartMinimized(true)
   }
 
@@ -90,9 +94,23 @@ export default function Home() {
         return <OrderHistory />
       default:
         return (
-          <div className="flex-1 flex gap-3 md:gap-6 p-3 md:p-6 overflow-hidden flex-col lg:flex-row">
+          <div className="flex-1 flex gap-3 md:gap-6 p-3 md:p-6 overflow-hidden flex-col lg:flex-row relative">
             <MenuGrid onAddToCart={addToCart} />
-            <div className="lg:w-96 flex flex-col">
+            
+            {/* Desktop Cart - Always visible */}
+            <div className="hidden lg:flex lg:w-96 flex-col">
+              <Cart
+                items={cartItems}
+                onRemove={removeFromCart}
+                onUpdateQuantity={updateQuantity}
+                onCheckout={handleCheckout}
+                isMinimized={false}
+                onToggleMinimize={() => {}}
+              />
+            </div>
+            
+            {/* Mobile Cart - Can be minimized */}
+            <div className="lg:hidden">
               <Cart
                 items={cartItems}
                 onRemove={removeFromCart}
@@ -111,19 +129,30 @@ export default function Home() {
     <div className="flex h-screen bg-linear-to-br from-slate-50 to-slate-100 flex-col md:flex-row">
       <Sidebar activeView={activeView} onViewChange={setActiveView} />
       <div className="flex-1 flex flex-col">
-        {/* Thermal Printer Control Bar */}
-        <div className="bg-white border-b border-slate-200 p-3 flex items-center justify-between">
+        {/* Thermal Printer Control Bar - Hidden on mobile when minimized */}
+        <div className={`bg-white border-b border-slate-200 p-3 flex items-center justify-between ${isThermalControlMinimized ? 'hidden lg:flex' : 'flex'}`}>
           <div className="flex items-center gap-2">
             <h1 className="text-lg font-bold text-slate-800">Chiryani POS</h1>
             <span className="text-xs bg-slate-100 px-2 py-1 rounded-full text-slate-600">
               {activeView.charAt(0).toUpperCase() + activeView.slice(1)}
             </span>
           </div>
-          <ThermalPrinterControl />
+          <div className="hidden lg:block">
+            <ThermalPrinterControl />
+          </div>
         </div>
         {renderCurrentView()}
       </div>
-      {showReceipt && <Receipt items={cartItems} orderNumber={orderNumber} onClose={handleNewOrder} />}
+      {showReceipt && lastOrderData && (
+        <Receipt 
+          items={cartItems} 
+          orderNumber={orderNumber} 
+          onClose={handleNewOrder}
+          orderSource={lastOrderData.orderSource}
+          customerName={lastOrderData.customerName}
+          includeCoupon={lastOrderData.includeCoupon}
+        />
+      )}
       {showSizeSelector && selectedItem && (
         <SizeSelector
           item={selectedItem}
@@ -131,6 +160,14 @@ export default function Home() {
           onClose={() => setShowSizeSelector(false)}
         />
       )}
+      
+      {/* Mobile Thermal Printer Control */}
+      <div className="lg:hidden">
+        <ThermalPrinterControl 
+          isMinimized={isThermalControlMinimized}
+          onToggleMinimize={() => setIsThermalControlMinimized(!isThermalControlMinimized)}
+        />
+      </div>
     </div>
   )
 }

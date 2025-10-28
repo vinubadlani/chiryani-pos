@@ -13,6 +13,7 @@ export interface CreateOrderData {
   total: number
   orderSource: 'dine-in' | 'zomato' | 'swiggy' | 'call'
   customerName?: string
+  includeCoupon?: boolean
 }
 
 export interface Order {

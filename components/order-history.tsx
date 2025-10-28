@@ -132,7 +132,7 @@ export function OrderHistory() {
     return items.reduce((sum, item) => sum + (item.price * item.quantity), 0)
   }
 
-  const handlePrintBill = async (order: Order) => {
+  const handlePrintBill = async (order: Order, includeCoupon: boolean = false) => {
     setIsPrinting(true)
     try {
       if (!thermalPrinter.isDeviceConnected()) {
@@ -152,6 +152,7 @@ export function OrderHistory() {
         customerName: order.customer_name || undefined,
         orderSource: order.order_source.toUpperCase(),
         timestamp: new Date(order.created_at),
+        includeCoupon
       }
 
       await thermalPrinter.printReceipt(printData)
@@ -162,6 +163,10 @@ export function OrderHistory() {
     } finally {
       setIsPrinting(false)
     }
+  }
+
+  const formatPrice = (amount: number): string => {
+    return `${amount}/-`;
   }
 
   const handleRegularPrint = (order: Order) => {
@@ -183,6 +188,9 @@ export function OrderHistory() {
               .item-price { width: 70px; text-align: right; font-weight: bold; }
               .divider { border-top: 2px solid #000; margin: 12px 0; }
               .total { display: flex; justify-content: space-between; font-weight: bold; font-size: 14px; margin: 10px 0; }
+              .feedback { border: 2px solid #10b981; padding: 12px; margin: 15px 0; text-align: center; background: #f0fdf4; }
+              .feedback-title { font-weight: bold; font-size: 14px; color: #10b981; margin-bottom: 8px; }
+              .feedback-msg { font-size: 11px; color: #333; line-height: 1.3; }
               .footer { text-align: center; font-size: 11px; margin-top: 15px; border-top: 1px solid #000; padding-top: 10px; }
             </style>
           </head>
@@ -209,7 +217,7 @@ export function OrderHistory() {
                   <div class="item">
                     <span class="item-name">${item.name}</span>
                     <span class="item-qty">${item.quantity}</span>
-                    <span class="item-price">₹${item.price * item.quantity}</span>
+                    <span class="item-price">${formatPrice(item.price * item.quantity)}</span>
                   </div>
                 `,
                   )
@@ -218,9 +226,13 @@ export function OrderHistory() {
               <div class="divider"></div>
               <div class="total">
                 <span>Total Amount:</span>
-                <span>₹${order.total_amount}</span>
+                <span>${formatPrice(order.total_amount)}</span>
               </div>
               <p style="text-align: center; font-size: 11px; margin: 8px 0; color: #666;">(Tax Included in Price)</p>
+              <div class="feedback">
+                <p class="feedback-title">FEEDBACK</p>
+                <p class="feedback-msg">We would love to hear feedback<br>WhatsApp call us at 9993305780<br>or message us at Instagram<br>@biryani_by_chiryani</p>
+              </div>
               <div class="footer">
                 <p style="font-weight: bold;">Thank you for your order!</p>
                 <p>Please collect your order from the counter</p>
@@ -339,7 +351,7 @@ export function OrderHistory() {
                         )}
                         <div className="flex items-center space-x-2">
                           <DollarSign className="w-4 h-4" />
-                          <span className="font-bold text-emerald-600 font-mono">₹{order.total_amount}</span>
+                          <span className="font-bold text-emerald-600 font-mono">{order.total_amount}/-</span>
                         </div>
                       </div>
                     </div>
@@ -393,11 +405,11 @@ export function OrderHistory() {
                                 <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                                   <div className="flex-1">
                                     <p className="font-semibold text-gray-900">{item.name}</p>
-                                    <p className="text-sm text-gray-600 font-mono">₹{item.price} each</p>
+                                    <p className="text-sm text-gray-600 font-mono">{item.price}/- each</p>
                                   </div>
                                   <div className="text-right min-w-[100px]">
                                     <p className="font-semibold text-gray-900">Qty: {item.quantity}</p>
-                                    <p className="text-sm text-emerald-600 font-mono font-bold">₹{item.price * item.quantity}</p>
+                                    <p className="text-sm text-emerald-600 font-mono font-bold">{item.price * item.quantity}/-</p>
                                   </div>
                                 </div>
                               ))}
@@ -407,12 +419,12 @@ export function OrderHistory() {
                           <div className="border-t pt-4">
                             <div className="flex justify-between items-center mb-4">
                               <span className="text-lg font-semibold text-gray-900">Total Amount:</span>
-                              <span className="text-2xl font-bold text-emerald-600 font-mono">₹{order.total_amount}</span>
+                              <span className="text-2xl font-bold text-emerald-600 font-mono">{order.total_amount}/-</span>
                             </div>
                             <p className="text-xs text-gray-500 mb-4">Tax included (5%)</p>
                             
                             {/* Print Buttons */}
-                            <div className="flex gap-3 pt-4 border-t">
+                            <div className="flex gap-2 pt-4 border-t">
                               <Button
                                 onClick={() => handleRegularPrint(order)}
                                 variant="outline"
@@ -424,24 +436,45 @@ export function OrderHistory() {
                               </Button>
                               
                               {thermalPrinter.isDeviceConnected() && (
-                                <Button
-                                  onClick={() => handlePrintBill(order)}
-                                  disabled={isPrinting}
-                                  size="sm"
-                                  className="flex-1 bg-emerald-600 hover:bg-emerald-700"
-                                >
-                                  {isPrinting ? (
-                                    <>
-                                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                                      Printing...
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Zap className="w-4 h-4 mr-2" />
-                                      Thermal Print
-                                    </>
-                                  )}
-                                </Button>
+                                <>
+                                  <Button
+                                    onClick={() => handlePrintBill(order, false)}
+                                    disabled={isPrinting}
+                                    size="sm"
+                                    variant="outline"
+                                    className="flex-1"
+                                  >
+                                    {isPrinting ? (
+                                      <>
+                                        <div className="w-4 h-4 border-2 border-gray-600 border-t-transparent rounded-full animate-spin mr-2" />
+                                        Printing...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Zap className="w-4 h-4 mr-2" />
+                                        Thermal
+                                      </>
+                                    )}
+                                  </Button>
+                                  <Button
+                                    onClick={() => handlePrintBill(order, true)}
+                                    disabled={isPrinting}
+                                    size="sm"
+                                    className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                                  >
+                                    {isPrinting ? (
+                                      <>
+                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                                        Printing...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Zap className="w-4 h-4 mr-2" />
+                                        + Coupon
+                                      </>
+                                    )}
+                                  </Button>
+                                </>
                               )}
                             </div>
                           </div>

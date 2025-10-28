@@ -27,6 +27,7 @@ interface CartProps {
     total: number
     orderSource: 'dine-in' | 'zomato' | 'swiggy' | 'call'
     customerName?: string
+    includeCoupon?: boolean
   }) => void
   isMinimized?: boolean
   onToggleMinimize?: () => void
@@ -41,9 +42,10 @@ export function Cart({
   onToggleMinimize,
 }: CartProps) {
   const [showPaymentDialog, setShowPaymentDialog] = useState(false)
-  const [orderSource, setOrderSource] = useState<'dine-in' | 'zomato' | 'swiggy' | 'call'>('dine-in')
+  const [orderSource, setOrderSource] = useState<'dine-in' | 'zomato' | 'swiggy' | 'call'>('zomato')
   const [customerName, setCustomerName] = useState('')
   const [autoPrintThermal, setAutoPrintThermal] = useState(false)
+  const [includeCoupon, setIncludeCoupon] = useState(true) // Smart default - enabled for Zomato
 
   const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0)
 
@@ -52,12 +54,24 @@ export function Cart({
     setShowPaymentDialog(true)
   }
 
+  // Smart coupon default based on order source
+  const handleOrderSourceChange = (newSource: 'dine-in' | 'zomato' | 'swiggy' | 'call') => {
+    setOrderSource(newSource)
+    // Smart defaults: Zomato/Swiggy usually want coupons, dine-in less likely
+    if (newSource === 'zomato' || newSource === 'swiggy') {
+      setIncludeCoupon(true)
+    } else {
+      setIncludeCoupon(false)
+    }
+  }
+
   const handlePaymentConfirm = async () => {
     const orderData = {
       items,
       total,
       orderSource,
-      customerName: customerName.trim() || undefined
+      customerName: customerName.trim() || undefined,
+      includeCoupon
     }
     
     // Call the checkout handler
@@ -78,6 +92,7 @@ export function Cart({
           customerName: customerName.trim() || undefined,
           orderSource: orderSource.toUpperCase(),
           timestamp: new Date(),
+          includeCoupon
         }
         
         await thermalPrinter.printReceipt(printData)
@@ -90,8 +105,9 @@ export function Cart({
     
     setShowPaymentDialog(false)
     setCustomerName('')
-    setOrderSource('dine-in')
+    setOrderSource('zomato') // Reset to default
     setAutoPrintThermal(false)
+    setIncludeCoupon(true) // Reset to smart default
   }
 
   if (isMinimized) {
@@ -111,7 +127,7 @@ export function Cart({
   }
 
   return (
-    <div className="w-full lg:w-96 bg-white rounded-2xl shadow-2xl border border-slate-100 flex flex-col overflow-hidden h-full lg:h-auto">
+    <div className="fixed inset-0 bg-white z-50 lg:relative lg:inset-auto lg:z-auto lg:w-96 lg:bg-white lg:rounded-2xl lg:shadow-2xl lg:border lg:border-slate-100 flex flex-col overflow-hidden h-full lg:h-auto">
       <div className="bg-linear-to-r from-emerald-500 via-teal-600 to-cyan-600 text-white p-5 flex items-center gap-3 shadow-lg">
         <ShoppingCart className="w-6 h-6" />
         <div className="flex-1">
@@ -140,7 +156,7 @@ export function Cart({
               <div className="flex justify-between items-start mb-3">
                 <div className="flex-1 min-w-0">
                   <h4 className="font-bold text-sm text-slate-800 line-clamp-2">{item.name}</h4>
-                  <p className="text-xs text-slate-500 mt-1">₹{item.price} each</p>
+                  <p className="text-xs text-slate-500 mt-1">{item.price}/- each</p>
                 </div>
                 <button
                   onClick={() => onRemove(item.id)}
@@ -166,7 +182,7 @@ export function Cart({
               </div>
               <div className="pt-3 border-t border-slate-200 flex justify-between">
                 <span className="text-xs text-slate-500 font-medium">Subtotal:</span>
-                <span className="font-bold text-sm text-emerald-600">₹{item.price * item.quantity}</span>
+                <span className="font-bold text-sm text-emerald-600">{item.price * item.quantity}/-</span>
               </div>
             </div>
           ))
@@ -177,7 +193,7 @@ export function Cart({
         <div className="space-y-2">
           <div className="flex justify-between items-center text-sm">
             <span className="text-slate-600 font-medium">Subtotal:</span>
-            <span className="font-bold text-slate-800">₹{total}</span>
+            <span className="font-bold text-slate-800">{total}/-</span>
           </div>
           <div className="flex justify-between items-center text-xs bg-emerald-50 px-3 py-2 rounded-lg border border-emerald-200">
             <span className="text-emerald-700 font-semibold">✓ Tax Included</span>
@@ -186,7 +202,7 @@ export function Cart({
         </div>
         <div className="flex justify-between items-center bg-linear-to-r from-emerald-50 to-teal-50 p-4 rounded-xl border-2 border-emerald-200">
           <span className="font-bold text-slate-800">Total:</span>
-          <span className="font-bold text-2xl text-emerald-600">₹{total}</span>
+          <span className="font-bold text-2xl text-emerald-600">{total}/-</span>
         </div>
         <Dialog open={showPaymentDialog} onOpenChange={setShowPaymentDialog}>
           <DialogTrigger asChild>
@@ -205,7 +221,7 @@ export function Cart({
             <div className="space-y-4">
               <div>
                 <Label htmlFor="orderSource">Order Source</Label>
-                <Select value={orderSource} onValueChange={(value: any) => setOrderSource(value)}>
+                <Select value={orderSource} onValueChange={handleOrderSourceChange}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select order source" />
                   </SelectTrigger>
@@ -248,6 +264,26 @@ export function Cart({
                 />
               </div>
 
+              {/* Coupon Control */}
+              <div className="flex items-center space-x-2 p-3 bg-orange-50 rounded-lg border border-orange-200">
+                <Checkbox
+                  id="includeCoupon"
+                  checked={includeCoupon}
+                  onCheckedChange={(checked) => setIncludeCoupon(checked as boolean)}
+                />
+                <div className="grid gap-1.5 leading-none">
+                  <Label
+                    htmlFor="includeCoupon"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center gap-2"
+                  >
+                    🎫 Include Special Offer Coupon
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Add "OLDUSER" coupon to receipt for customer savings
+                  </p>
+                </div>
+              </div>
+
               {/* Thermal Print Option */}
               {thermalPrinter.isDeviceConnected() && (
                 <div className="flex items-center space-x-2 p-3 bg-emerald-50 rounded-lg border border-emerald-200">
@@ -274,7 +310,7 @@ export function Cart({
               <div className="border-t pt-4">
                 <div className="flex justify-between items-center mb-2">
                   <span className="font-semibold">Total Amount:</span>
-                  <span className="text-xl font-bold text-emerald-600">₹{total}</span>
+                  <span className="text-xl font-bold text-emerald-600">{total}/-</span>
                 </div>
                 <div className="text-xs text-gray-500">Tax included (5%)</div>
               </div>

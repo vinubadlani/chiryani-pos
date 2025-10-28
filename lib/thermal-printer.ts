@@ -78,6 +78,7 @@ export interface PrintData {
   customerName?: string;
   orderSource: string;
   timestamp: Date;
+  includeCoupon?: boolean;
 }
 
 const RESTAURANT_DETAILS = {
@@ -89,6 +90,8 @@ const RESTAURANT_DETAILS = {
 
 const COUPON_CODE = "OLDUSER"
 const COUPON_MESSAGE = "Get additional offer on your next bill on Zomato/Swiggy or Call us!"
+
+const FEEDBACK_MESSAGE = "We would love to hear feedback\nWhatsApp call us at 9993305780\nor message us at Instagram\n@biryani_by_chiryani"
 
 class ThermalPrinterService {
   private device: BluetoothDevice | USBDevice | null = null;
@@ -366,16 +369,55 @@ class ThermalPrinterService {
     }
   }
 
-  private formatLine(left: string, right: string, width: number = 32): string {
+  private formatLine(left: string, right: string, width: number = 31): string {
     const leftLen = left.length;
     const rightLen = right.length;
     const spaces = width - leftLen - rightLen;
     return left + ' '.repeat(Math.max(0, spaces)) + right;
   }
 
-  private centerText(text: string, width: number = 32): string {
+  private centerText(text: string, width: number = 31): string {
     const padding = Math.max(0, Math.floor((width - text.length) / 2));
     return ' '.repeat(padding) + text;
+  }
+
+  private wrapText(text: string, maxWidth: number = 31): string[] {
+    if (text.length <= maxWidth) {
+      return [text];
+    }
+    
+    const words = text.split(' ');
+    const lines: string[] = [];
+    let currentLine = '';
+    
+    for (const word of words) {
+      if ((currentLine + ' ' + word).trim().length <= maxWidth) {
+        currentLine = currentLine ? currentLine + ' ' + word : word;
+      } else {
+        if (currentLine) {
+          lines.push(currentLine);
+        }
+        // If single word is too long, split it
+        if (word.length > maxWidth) {
+          for (let i = 0; i < word.length; i += maxWidth) {
+            lines.push(word.substring(i, i + maxWidth));
+          }
+          currentLine = '';
+        } else {
+          currentLine = word;
+        }
+      }
+    }
+    
+    if (currentLine) {
+      lines.push(currentLine);
+    }
+    
+    return lines;
+  }
+
+  private formatPrice(amount: number): string {
+    return `${amount}/-`;
   }
 
   async printReceipt(data: PrintData): Promise<void> {
@@ -395,72 +437,113 @@ class ThermalPrinterService {
       await this.sendCommand(this.commands.BOLD_OFF);
       await this.sendCommand(this.commands.SIZE_NORMAL);
       
-      // Restaurant details
-      await this.sendCommand(RESTAURANT_DETAILS.address + '\n');
-      await this.sendCommand(`FSSAI License: ${RESTAURANT_DETAILS.fssaiLicense}\n`);
-      await this.sendCommand('--------------------------------\n');
+      // Restaurant details - properly wrapped for 31 characters
+      const addressLines = this.wrapText(RESTAURANT_DETAILS.address);
+      for (const line of addressLines) {
+        await this.sendCommand(this.centerText(line) + '\n');
+      }
+      await this.sendCommand(this.centerText(`FSSAI: ${RESTAURANT_DETAILS.fssaiLicense}`) + '\n');
+      await this.sendCommand('-------------------------------\n');
       
       // Order details
+      await this.sendCommand(this.commands.ALIGN_LEFT);
       await this.sendCommand(this.commands.BOLD_ON);
-      await this.sendCommand(`Order: ${data.orderNumber}\n`);
+      await this.sendCommand(this.formatLine('Order:', data.orderNumber) + '\n');
       await this.sendCommand(this.commands.BOLD_OFF);
       await this.sendCommand(`Date: ${data.timestamp.toLocaleString()}\n`);
       
       if (data.customerName) {
-        await this.sendCommand(`Customer: ${data.customerName}\n`);
+        const nameLines = this.wrapText(`Customer: ${data.customerName}`);
+        for (const line of nameLines) {
+          await this.sendCommand(line + '\n');
+        }
       }
       
-      await this.sendCommand(`Source: ${data.orderSource.toUpperCase()}\n`);
-      await this.sendCommand('--------------------------------\n');
+      await this.sendCommand(this.formatLine('Source:', data.orderSource.toUpperCase()) + '\n');
+      await this.sendCommand('-------------------------------\n');
 
       // Items header
-      await this.sendCommand(this.commands.ALIGN_LEFT);
       await this.sendCommand(this.commands.BOLD_ON);
-      await this.sendCommand(this.formatLine('Item', 'Qty  Total') + '\n');
+      await this.sendCommand(this.formatLine('Item', 'Qty Total') + '\n');
       await this.sendCommand(this.commands.BOLD_OFF);
-      await this.sendCommand('--------------------------------\n');
+      await this.sendCommand('-------------------------------\n');
 
-      // Items
+      // Items - properly formatted for 31 characters
       for (const item of data.items) {
-        const itemName = item.name.length > 20 ? item.name.substring(0, 17) + '...' : item.name;
-        const qtyTotal = `${item.quantity}  ₹${item.price * item.quantity}`;
-        await this.sendCommand(this.formatLine(itemName, qtyTotal) + '\n');
+        const priceFormatted = this.formatPrice(item.price * item.quantity);
+        const qtyTotal = `${item.quantity} ${priceFormatted}`;
         
-        if (item.name.length > 20) {
-          await this.sendCommand(item.name.substring(17) + '\n');
+        if (item.name.length + qtyTotal.length + 1 <= 31) {
+          // Single line if it fits
+          await this.sendCommand(this.formatLine(item.name, qtyTotal) + '\n');
+        } else {
+          // Multi-line for long item names
+          const maxNameLength = 31 - qtyTotal.length - 1;
+          const nameLines = this.wrapText(item.name, maxNameLength);
+          
+          // First line with price
+          await this.sendCommand(this.formatLine(nameLines[0], qtyTotal) + '\n');
+          
+          // Additional lines for item name
+          for (let i = 1; i < nameLines.length; i++) {
+            await this.sendCommand(nameLines[i] + '\n');
+          }
         }
       }
 
-      await this.sendCommand('--------------------------------\n');
+      await this.sendCommand('-------------------------------\n');
 
-      // Total
+      // Total with better spacing
+      await this.sendCommand('\n');
       await this.sendCommand(this.commands.BOLD_ON);
       await this.sendCommand(this.commands.SIZE_DOUBLE);
-      await this.sendCommand(this.formatLine('TOTAL:', `₹${data.total}`) + '\n');
+      await this.sendCommand(this.formatLine('TOTAL:', this.formatPrice(data.total)) + '\n');
       await this.sendCommand(this.commands.SIZE_NORMAL);
       await this.sendCommand(this.commands.BOLD_OFF);
+      await this.sendCommand('\n');
       
       await this.sendCommand(this.commands.ALIGN_CENTER);
       await this.sendCommand('(Tax Included in Price)\n');
-      await this.sendCommand('--------------------------------\n');
+      await this.sendCommand('-------------------------------\n');
 
-      // Coupon section
-      await this.sendCommand('SPECIAL OFFER FOR YOU\n');
+      // Conditional coupon section - only if includeCoupon is true
+      if (data.includeCoupon) {
+        await this.sendCommand('SPECIAL OFFER FOR YOU\n');
+        await this.sendCommand(this.commands.BOLD_ON);
+        await this.sendCommand(this.commands.SIZE_LARGE);
+        await this.sendCommand(`${COUPON_CODE}\n`);
+        await this.sendCommand(this.commands.SIZE_NORMAL);
+        await this.sendCommand(this.commands.BOLD_OFF);
+        
+        const couponLines = this.wrapText(COUPON_MESSAGE);
+        for (const line of couponLines) {
+          await this.sendCommand(this.centerText(line) + '\n');
+        }
+        await this.sendCommand('-------------------------------\n');
+      }
+
+      // Feedback section - ALWAYS included
       await this.sendCommand(this.commands.BOLD_ON);
-      await this.sendCommand(this.commands.SIZE_LARGE);
-      await this.sendCommand(`${COUPON_CODE}\n`);
-      await this.sendCommand(this.commands.SIZE_NORMAL);
+      await this.sendCommand('FEEDBACK\n');
       await this.sendCommand(this.commands.BOLD_OFF);
-      await this.sendCommand(COUPON_MESSAGE + '\n');
-      await this.sendCommand('--------------------------------\n');
+      
+      const feedbackLines = FEEDBACK_MESSAGE.split('\n');
+      for (const line of feedbackLines) {
+        await this.sendCommand(this.centerText(line) + '\n');
+      }
+      await this.sendCommand('-------------------------------\n');
 
       // Footer
       await this.sendCommand(this.commands.BOLD_ON);
       await this.sendCommand('Thank you for your order!\n');
       await this.sendCommand(this.commands.BOLD_OFF);
-      await this.sendCommand('Please collect your order from the counter\n');
+      const footerMessage = 'Please collect your order from the counter';
+      const footerLines = this.wrapText(footerMessage);
+      for (const line of footerLines) {
+        await this.sendCommand(this.centerText(line) + '\n');
+      }
       await this.sendCommand('\n');
-      await this.sendCommand('Powered by Chiryani POS\n');
+      await this.sendCommand(this.centerText('Powered by Chiryani POS') + '\n');
 
       // Feed and cut
       await this.sendCommand(this.commands.FEED_LINES(3));
@@ -535,12 +618,14 @@ class ThermalPrinterService {
       await this.sendCommand('TEST PRINT\n');
       await this.sendCommand(this.commands.BOLD_OFF);
       await this.sendCommand(this.commands.SIZE_NORMAL);
-      await this.sendCommand('--------------------------------\n');
+      await this.sendCommand('-------------------------------\n');
       await this.sendCommand('Chiryani POS System\n');
       await this.sendCommand('Thermal Printer Connected\n');
       await this.sendCommand(new Date().toLocaleString() + '\n');
-      await this.sendCommand('--------------------------------\n');
+      await this.sendCommand('-------------------------------\n');
       await this.sendCommand('Print test successful!\n');
+      await this.sendCommand(`Price format: ${this.formatPrice(375)}\n`);
+      await this.sendCommand('-------------------------------\n');
       await this.sendCommand(this.commands.FEED_LINES(3));
       await this.sendCommand(this.commands.CUT_PAPER);
     } catch (error) {
