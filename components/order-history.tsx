@@ -18,8 +18,12 @@ import {
   Eye,
   Calendar,
   DollarSign,
-  ShoppingBag
+  ShoppingBag,
+  Printer,
+  Zap
 } from 'lucide-react'
+import { thermalPrinter, type PrintData } from "@/lib/thermal-printer"
+import { toast } from "sonner"
 import { format } from 'date-fns'
 
 export function OrderHistory() {
@@ -30,6 +34,7 @@ export function OrderHistory() {
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [loading, setLoading] = useState(true)
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
+  const [isPrinting, setIsPrinting] = useState(false)
 
   const fetchOrders = async () => {
     setLoading(true)
@@ -125,6 +130,109 @@ export function OrderHistory() {
 
   const calculateOrderTotal = (items: any[]) => {
     return items.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+  }
+
+  const handlePrintBill = async (order: Order) => {
+    setIsPrinting(true)
+    try {
+      if (!thermalPrinter.isDeviceConnected()) {
+        toast.error('Thermal printer not connected. Please connect a printer first.')
+        return
+      }
+
+      const printData: PrintData = {
+        orderNumber: order.order_number,
+        items: order.items.map(item => ({
+          id: item.id || Math.random().toString(),
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price
+        })),
+        total: order.total_amount,
+        customerName: order.customer_name || undefined,
+        orderSource: order.order_source.toUpperCase(),
+        timestamp: new Date(order.created_at),
+      }
+
+      await thermalPrinter.printReceipt(printData)
+      toast.success('Bill printed successfully!')
+    } catch (error) {
+      console.error('Print error:', error)
+      toast.error(`Print failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      setIsPrinting(false)
+    }
+  }
+
+  const handleRegularPrint = (order: Order) => {
+    const printWindow = window.open("", "", "height=600,width=800")
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <style>
+              body { font-family: 'Courier New', monospace; margin: 0; padding: 20px; background: white; }
+              .receipt { max-width: 400px; margin: 0 auto; }
+              .header { text-align: center; border-bottom: 3px solid #000; padding-bottom: 15px; margin-bottom: 15px; }
+              .header h1 { margin: 0; font-size: 20px; font-weight: bold; }
+              .header p { margin: 5px 0; font-size: 11px; line-height: 1.4; }
+              .items { margin: 15px 0; }
+              .item { display: flex; justify-content: space-between; font-size: 12px; margin: 8px 0; }
+              .item-name { flex: 1; font-weight: bold; }
+              .item-qty { width: 40px; text-align: center; }
+              .item-price { width: 70px; text-align: right; font-weight: bold; }
+              .divider { border-top: 2px solid #000; margin: 12px 0; }
+              .total { display: flex; justify-content: space-between; font-weight: bold; font-size: 14px; margin: 10px 0; }
+              .footer { text-align: center; font-size: 11px; margin-top: 15px; border-top: 1px solid #000; padding-top: 10px; }
+            </style>
+          </head>
+          <body>
+            <div class="receipt">
+              <div class="header">
+                <h1>Chiryani</h1>
+                <p>20, Ground Floor, Padmavati Colony, Near St Paul School, Geeta Bhavan, Indore</p>
+                <p>FSSAI License: 21425850010639</p>
+                <p style="margin-top: 8px; font-weight: bold;">Order: ${order.order_number}</p>
+                <p>${new Date(order.created_at).toLocaleString()}</p>
+                ${order.customer_name ? `<p>Customer: ${order.customer_name}</p>` : ''}
+                <p>Source: ${order.order_source.toUpperCase()}</p>
+              </div>
+              <div class="items">
+                <div class="item" style="font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 5px; margin-bottom: 8px;">
+                  <span class="item-name">Item</span>
+                  <span class="item-qty">Qty</span>
+                  <span class="item-price">Total</span>
+                </div>
+                ${order.items
+                  .map(
+                    (item) => `
+                  <div class="item">
+                    <span class="item-name">${item.name}</span>
+                    <span class="item-qty">${item.quantity}</span>
+                    <span class="item-price">₹${item.price * item.quantity}</span>
+                  </div>
+                `,
+                  )
+                  .join("")}
+              </div>
+              <div class="divider"></div>
+              <div class="total">
+                <span>Total Amount:</span>
+                <span>₹${order.total_amount}</span>
+              </div>
+              <p style="text-align: center; font-size: 11px; margin: 8px 0; color: #666;">(Tax Included in Price)</p>
+              <div class="footer">
+                <p style="font-weight: bold;">Thank you for your order!</p>
+                <p>Please collect your order from the counter</p>
+                <p style="margin-top: 8px; font-size: 10px;">Powered by Chiryani POS</p>
+              </div>
+            </div>
+          </body>
+        </html>
+      `)
+      printWindow.document.close()
+      setTimeout(() => printWindow.print(), 250)
+    }
   }
 
   return (
@@ -231,7 +339,7 @@ export function OrderHistory() {
                         )}
                         <div className="flex items-center space-x-2">
                           <DollarSign className="w-4 h-4" />
-                          <span className="font-semibold">₹{order.total_amount}</span>
+                          <span className="font-bold text-emerald-600 font-mono">₹{order.total_amount}</span>
                         </div>
                       </div>
                     </div>
@@ -283,13 +391,13 @@ export function OrderHistory() {
                             <div className="space-y-2">
                               {order.items.map((item: any, index: number) => (
                                 <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                                  <div>
-                                    <p className="font-semibold">{item.name}</p>
-                                    <p className="text-sm text-gray-600">₹{item.price} each</p>
+                                  <div className="flex-1">
+                                    <p className="font-semibold text-gray-900">{item.name}</p>
+                                    <p className="text-sm text-gray-600 font-mono">₹{item.price} each</p>
                                   </div>
-                                  <div className="text-right">
-                                    <p className="font-semibold">Qty: {item.quantity}</p>
-                                    <p className="text-sm text-gray-600">₹{item.price * item.quantity}</p>
+                                  <div className="text-right min-w-[100px]">
+                                    <p className="font-semibold text-gray-900">Qty: {item.quantity}</p>
+                                    <p className="text-sm text-emerald-600 font-mono font-bold">₹{item.price * item.quantity}</p>
                                   </div>
                                 </div>
                               ))}
@@ -297,11 +405,45 @@ export function OrderHistory() {
                           </div>
                           
                           <div className="border-t pt-4">
-                            <div className="flex justify-between items-center">
-                              <span className="text-lg font-semibold">Total Amount:</span>
-                              <span className="text-xl font-bold text-emerald-600">₹{order.total_amount}</span>
+                            <div className="flex justify-between items-center mb-4">
+                              <span className="text-lg font-semibold text-gray-900">Total Amount:</span>
+                              <span className="text-2xl font-bold text-emerald-600 font-mono">₹{order.total_amount}</span>
                             </div>
-                            <p className="text-xs text-gray-500 mt-1">Tax included (5%)</p>
+                            <p className="text-xs text-gray-500 mb-4">Tax included (5%)</p>
+                            
+                            {/* Print Buttons */}
+                            <div className="flex gap-3 pt-4 border-t">
+                              <Button
+                                onClick={() => handleRegularPrint(order)}
+                                variant="outline"
+                                size="sm"
+                                className="flex-1"
+                              >
+                                <Printer className="w-4 h-4 mr-2" />
+                                Print Bill
+                              </Button>
+                              
+                              {thermalPrinter.isDeviceConnected() && (
+                                <Button
+                                  onClick={() => handlePrintBill(order)}
+                                  disabled={isPrinting}
+                                  size="sm"
+                                  className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                                >
+                                  {isPrinting ? (
+                                    <>
+                                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                                      Printing...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Zap className="w-4 h-4 mr-2" />
+                                      Thermal Print
+                                    </>
+                                  )}
+                                </Button>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </DialogContent>

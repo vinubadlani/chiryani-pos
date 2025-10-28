@@ -39,6 +39,14 @@ A modern, comprehensive Point of Sale (POS) system built with Next.js, Supabase,
 - Revenue tracking and reporting
 - Scalable PostgreSQL database
 
+### 🖨️ Thermal Printer Support
+- **Bluetooth, USB, and Serial** connection support
+- **ESC/POS compatible** printers (EPSON, Star Micronics, Citizen, Bixolon)
+- **Auto-print receipts** after order confirmation
+- **Professional receipt format** with restaurant branding
+- **Cash drawer integration** for connected drawers
+- **Configurable print settings** (paper width, cutting, etc.)
+
 ## Tech Stack
 
 - **Frontend**: Next.js 16 with TypeScript

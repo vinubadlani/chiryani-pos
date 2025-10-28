@@ -8,6 +8,7 @@ import { Receipt } from "@/components/receipt"
 import { SizeSelector } from "@/components/size-selector"
 import { Dashboard } from "@/components/dashboard"
 import { OrderHistory } from "@/components/order-history"
+import { ThermalPrinterControl } from "@/components/thermal-printer-control"
 import { createOrder, CreateOrderData } from "@/lib/orders"
 import { toast } from "sonner"
 
@@ -109,7 +110,19 @@ export default function Home() {
   return (
     <div className="flex h-screen bg-linear-to-br from-slate-50 to-slate-100 flex-col md:flex-row">
       <Sidebar activeView={activeView} onViewChange={setActiveView} />
-      {renderCurrentView()}
+      <div className="flex-1 flex flex-col">
+        {/* Thermal Printer Control Bar */}
+        <div className="bg-white border-b border-slate-200 p-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h1 className="text-lg font-bold text-slate-800">Chiryani POS</h1>
+            <span className="text-xs bg-slate-100 px-2 py-1 rounded-full text-slate-600">
+              {activeView.charAt(0).toUpperCase() + activeView.slice(1)}
+            </span>
+          </div>
+          <ThermalPrinterControl />
+        </div>
+        {renderCurrentView()}
+      </div>
       {showReceipt && <Receipt items={cartItems} orderNumber={orderNumber} onClose={handleNewOrder} />}
       {showSizeSelector && selectedItem && (
         <SizeSelector

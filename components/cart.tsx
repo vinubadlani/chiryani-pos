@@ -1,12 +1,15 @@
 "use client"
 
-import { Trash2, ShoppingCart, ChevronDown, Phone, Truck, UtensilsCrossed } from "lucide-react"
+import { Trash2, ShoppingCart, ChevronDown, Phone, Truck, UtensilsCrossed, Zap } from "lucide-react"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
+import { thermalPrinter, type PrintData } from "@/lib/thermal-printer"
+import { toast } from "sonner"
 
 interface CartItem {
   id: string
@@ -40,6 +43,7 @@ export function Cart({
   const [showPaymentDialog, setShowPaymentDialog] = useState(false)
   const [orderSource, setOrderSource] = useState<'dine-in' | 'zomato' | 'swiggy' | 'call'>('dine-in')
   const [customerName, setCustomerName] = useState('')
+  const [autoPrintThermal, setAutoPrintThermal] = useState(false)
 
   const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0)
 
@@ -48,16 +52,46 @@ export function Cart({
     setShowPaymentDialog(true)
   }
 
-  const handlePaymentConfirm = () => {
-    onCheckout({
+  const handlePaymentConfirm = async () => {
+    const orderData = {
       items,
       total,
       orderSource,
       customerName: customerName.trim() || undefined
-    })
+    }
+    
+    // Call the checkout handler
+    onCheckout(orderData)
+    
+    // Auto-print to thermal printer if enabled and connected
+    if (autoPrintThermal && thermalPrinter.isDeviceConnected()) {
+      try {
+        const printData: PrintData = {
+          orderNumber: `ORD-${Date.now()}`, // Generate temporary order number
+          items: items.map(item => ({
+            id: item.id,
+            name: item.name,
+            quantity: item.quantity,
+            price: item.price
+          })),
+          total,
+          customerName: customerName.trim() || undefined,
+          orderSource: orderSource.toUpperCase(),
+          timestamp: new Date(),
+        }
+        
+        await thermalPrinter.printReceipt(printData)
+        toast.success('Order created and printed to thermal printer!')
+      } catch (error) {
+        console.error('Auto thermal print failed:', error)
+        toast.error('Order created but thermal printing failed')
+      }
+    }
+    
     setShowPaymentDialog(false)
     setCustomerName('')
     setOrderSource('dine-in')
+    setAutoPrintThermal(false)
   }
 
   if (isMinimized) {
@@ -213,6 +247,29 @@ export function Cart({
                   placeholder="Enter customer name"
                 />
               </div>
+
+              {/* Thermal Print Option */}
+              {thermalPrinter.isDeviceConnected() && (
+                <div className="flex items-center space-x-2 p-3 bg-emerald-50 rounded-lg border border-emerald-200">
+                  <Checkbox
+                    id="autoPrintThermal"
+                    checked={autoPrintThermal}
+                    onCheckedChange={(checked) => setAutoPrintThermal(checked as boolean)}
+                  />
+                  <div className="grid gap-1.5 leading-none">
+                    <Label
+                      htmlFor="autoPrintThermal"
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center gap-2"
+                    >
+                      <Zap className="w-4 h-4 text-emerald-600" />
+                      Auto-print to thermal printer
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Automatically print receipt after confirming order
+                    </p>
+                  </div>
+                </div>
+              )}
               
               <div className="border-t pt-4">
                 <div className="flex justify-between items-center mb-2">

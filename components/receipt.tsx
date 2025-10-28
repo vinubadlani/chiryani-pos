@@ -1,7 +1,9 @@
 "use client"
 
-import { X, Printer, Copy } from "lucide-react"
+import { X, Printer, Copy, Zap } from "lucide-react"
 import { useRef, useState } from "react"
+import { thermalPrinter, type PrintData } from "@/lib/thermal-printer"
+import { toast } from "sonner"
 
 interface ReceiptProps {
   items: any[]
@@ -22,6 +24,7 @@ const COUPON_MESSAGE = "Get additional offer on your next bill on Zomato/Swiggy 
 export function Receipt({ items, orderNumber, onClose }: ReceiptProps) {
   const receiptRef = useRef<HTMLDivElement>(null)
   const [copied, setCopied] = useState(false)
+  const [isPrintingThermal, setIsPrintingThermal] = useState(false)
   const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0)
   const timestamp = new Date()
 
@@ -109,10 +112,41 @@ export function Receipt({ items, orderNumber, onClose }: ReceiptProps) {
     }
   }
 
+  const handleThermalPrint = async () => {
+    setIsPrintingThermal(true)
+    try {
+      if (!thermalPrinter.isDeviceConnected()) {
+        toast.error('Thermal printer not connected. Please connect a printer first.')
+        return
+      }
+
+      const printData: PrintData = {
+        orderNumber,
+        items: items.map(item => ({
+          id: item.id,
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price
+        })),
+        total,
+        timestamp,
+        orderSource: 'POS', // Default order source
+      }
+
+      await thermalPrinter.printReceipt(printData)
+      toast.success('Receipt printed successfully on thermal printer!')
+    } catch (error) {
+      console.error('Thermal print error:', error)
+      toast.error(`Thermal print failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      setIsPrintingThermal(false)
+    }
+  }
+
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="bg-gradient-to-r from-teal-600 to-teal-700 text-white p-5 flex items-center justify-between shadow-md">
+        <div className="bg-linear-to-r from-teal-600 to-teal-700 text-white p-5 flex items-center justify-between shadow-md">
           <h2 className="font-bold text-lg">Receipt</h2>
           <button onClick={onClose} className="hover:bg-white/20 p-2 rounded-lg transition">
             <X className="w-5 h-5" />
@@ -168,7 +202,7 @@ export function Receipt({ items, orderNumber, onClose }: ReceiptProps) {
               </div>
               <button
                 onClick={handleCopyCoupon}
-                className="flex-shrink-0 bg-teal-600 hover:bg-teal-700 text-white p-2.5 rounded-lg transition transform hover:scale-110"
+                className="shrink-0 bg-teal-600 hover:bg-teal-700 text-white p-2.5 rounded-lg transition transform hover:scale-110"
                 title="Copy coupon code"
               >
                 <Copy className="w-4 h-4" />
@@ -185,13 +219,30 @@ export function Receipt({ items, orderNumber, onClose }: ReceiptProps) {
           </div>
         </div>
 
-        <div className="border-t border-slate-200 p-4 bg-slate-50 flex gap-3">
+        <div className="border-t border-slate-200 p-4 bg-slate-50 flex gap-2">
           <button
             onClick={handlePrint}
-            className="flex-1 bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105"
+            className="flex-1 bg-linear-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105"
           >
             <Printer className="w-4 h-4" />
             <span className="hidden sm:inline">Print</span>
+          </button>
+          <button
+            onClick={handleThermalPrint}
+            disabled={isPrintingThermal}
+            className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 disabled:hover:scale-100"
+          >
+            {isPrintingThermal ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <span className="hidden sm:inline">Printing...</span>
+              </>
+            ) : (
+              <>
+                <Zap className="w-4 h-4" />
+                <span className="hidden sm:inline">Thermal</span>
+              </>
+            )}
           </button>
           <button
             onClick={onClose}
